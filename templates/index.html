@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bird Flu Checker - Chat Mode</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
+    <style>
+        body {
+            background: url('static/images/hospital.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+        }
+    
+        .chat-container {
+            width: 100%;
+            max-width: 450px;
+            margin: 20px auto;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+            padding: 10px;
+        }
+    
+        .chat-box {
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+    
+        .message {
+            max-width: 75%;
+            padding: 10px;
+            border-radius: 10px;
+            margin: 5px 0;
+        }
+    
+        .bot { background: #d3e3fc; align-self: flex-start; }
+        .user { background: #caf0f8; align-self: flex-end; }
+    
+        .options { display: flex; flex-wrap: wrap; }
+    </style>
+
+    <script>
+        let chatIndex = 0;
+        let userResponses = {};
+        const questions = [
+            { id: "fever", text: "Do you have a fever (above 100°F)?", options: ["Yes", "No"] },
+            { id: "cough", text: "Are you experiencing a cough?", options: ["Yes", "No"] },
+            { id: "sore_throat", text: "Do you have a sore throat?", options: ["Yes", "No"] },
+            { id: "fatigue", text: "How is your fatigue level?", options: ["None", "Mild", "Moderate", "Severe"] },
+            { id: "difficulty_breathing", text: "Are you having difficulty breathing?", options: ["Yes", "No"] },
+            { id: "travel_history", text: "Have you recently traveled to an infected area?", options: ["Yes", "No"] }
+        ];
+
+        function startChat() {
+            document.getElementById("chat-box").innerHTML = "";
+            chatIndex = 0;
+            askQuestion();
+        }
+
+        function askQuestion() {
+            if (chatIndex < questions.length) {
+                let question = questions[chatIndex];
+                let chatBox = document.getElementById("chat-box");
+                chatBox.innerHTML += `<div class="message bot">${question.text}</div>`;
+                let options = question.options.map(option => 
+                    `<button class="btn btn-outline-primary m-1" onclick="storeResponse('${question.id}', '${option}')">${option}</button>`
+                ).join("");
+                chatBox.innerHTML += `<div class="options">${options}</div>`;
+            } else {
+                sendToBackend();
+            }
+        }
+
+        function storeResponse(questionId, answer) {
+            userResponses[questionId] = answer;
+            document.getElementById("chat-box").innerHTML += `<div class="message user">${answer}</div>`;
+            document.querySelector(".options").remove();
+            chatIndex++;
+            setTimeout(askQuestion, 500);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function sendToBackend() {
+    let response = await fetch("/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userResponses)
+    });
+
+    let result = await response.json();  // Extract JSON data from response
+
+    let chatBox = document.getElementById("chat-box");
+
+    chatBox.innerHTML += `
+        <div class="message bot">
+            <strong>Diagnosis Result:</strong><br>
+            ${result.messages.join("<br>")}
+        </div>
+    `;
+
+    chatBox.innerHTML += `
+        <div class="message bot">
+            <strong>Suggested Medicines:</strong><br>
+            <ul>${result.medicines.map(med => `<li>${med}</li>`).join("")}</ul>
+        </div>
+    `;
+
+    chatBox.innerHTML += `
+        <div class="message bot">
+            <strong>Home Remedies:</strong><br>
+            <ul>${result.home_remedies.map(remedy => `<li>${remedy}</li>`).join("")}</ul>
+        </div>
+    `;
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+    findNearbyHospitals();
+}
+
+
+        function findNearbyHospitals() {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                let response = await fetch("/nearby_hospitals", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ latitude: position.coords.latitude, longitude: position.coords.longitude })
+                });
+                let hospitals = await response.json();
+                document.getElementById("chat-box").innerHTML += `<div class="message bot"><strong>Nearby Hospitals:</strong><br>${hospitals.map(h => `<a href="${h.map_link}" target="_blank">${h.name}</a>`).join("<br>")}</div>`;
+            });
+        }
+    </script>
+</head>
+<body>
+    <div class="chat-container">
+        <h2 class="text-center text-primary">Bird Flu Diagnosis</h2>
+        <div id="chat-box" class="chat-box"></div>
+        <button class="btn btn-primary w-100 mt-2" onclick="startChat()">Start Diagnosis</button>
+    </div>
+</body>
+</html>
